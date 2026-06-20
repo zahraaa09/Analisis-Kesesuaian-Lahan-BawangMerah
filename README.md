@@ -25,7 +25,7 @@ python main.py
 - Export CSV & Shapefile
 - Dashboard chart
 
-👥 Tim
+## 👥 Tim
 - Zahra Aulia Putri (H071241025)
 - Dewi Astuti Muchtar (H071241034)
 - Syahrani Zakiyah Nurfaizah (H071241042)
