@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html class="dark" lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>TerraGIS Precision | Analisis Kesesuaian Bawang Merah</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Inter',sans-serif;background:#0a0f1a;color:#e2e8f0;overflow:hidden;height:100vh;}
+    .material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 300,'GRAD' 0,'opsz' 24;line-height:1;}
+    .glass-panel{background:rgba(15,23,42,0.82);backdrop-filter:blur(16px);border:1px solid rgba(165,208,185,0.15);box-shadow:0 8px 32px 0 rgba(0,0,0,0.5);}
+    .hud-border{position:relative;}
+    .hud-border::before{content:'';position:absolute;top:0;left:0;width:12px;height:12px;border-top:2px solid #a5d0b9;border-left:2px solid #a5d0b9;opacity:0.6;}
+    .hud-border::after{content:'';position:absolute;bottom:0;right:0;width:12px;height:12px;border-bottom:2px solid #a5d0b9;border-right:2px solid #a5d0b9;opacity:0.6;}
+    .scan-line{width:100%;height:2px;background:linear-gradient(90deg,transparent,#a5d0b9,transparent);position:absolute;animation:scan 4s linear infinite;opacity:0.2;pointer-events:none;}
+    @keyframes scan{0%{top:0;}100%{top:100%;}}
+    .tech-grid{background-image:linear-gradient(rgba(165,208,185,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(165,208,185,0.04) 1px,transparent 1px);background-size:24px 24px;}
+    #map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;}
+    /* zoom control — pojok kiri atas, tidak tertutup sidebar */
+    .leaflet-top.leaflet-left{top:76px!important;left:240px!important;}
+    .leaflet-control-zoom{border:none!important;box-shadow:none!important;margin:8px!important;}
+    .leaflet-control-zoom a{background:rgba(15,23,42,0.85)!important;backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.06)!important;color:#e2e8f0!important;width:36px!important;height:36px!important;line-height:36px!important;font-size:18px!important;border-radius:8px!important;margin-bottom:4px!important;}
+    .leaflet-control-zoom a:hover{background:rgba(30,41,59,0.9)!important;}
+    .leaflet-popup-content-wrapper{background:rgba(15,23,42,0.95)!important;backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.06);border-radius:12px!important;color:#e2e8f0!important;box-shadow:0 20px 60px rgba(0,0,0,0.6)!important;}
+    .leaflet-popup-tip{background:rgba(15,23,42,0.95)!important;}
+    .leaflet-popup-close-button{color:#94a3b8!important;}
+    .leaflet-draw-actions{background:rgba(15,23,42,0.92)!important;backdrop-filter:blur(8px);border-radius:10px!important;border:1px solid rgba(255,255,255,0.06)!important;}
+    .leaflet-draw-actions a{color:#e2e8f0!important;font-size:12px!important;}
+    .toggle-switch{position:relative;width:40px;height:22px;flex-shrink:0;cursor:pointer;}
+    .toggle-switch input{opacity:0;width:0;height:0;}
+    .toggle-slider{position:absolute;inset:0;background:#1e293b;border-radius:30px;transition:0.3s;}
+    .toggle-slider::before{content:'';position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:#94a3b8;border-radius:50%;transition:0.3s;}
+    .toggle-switch input:checked+.toggle-slider{background:#22c55e;}
+    .toggle-switch input:checked+.toggle-slider::before{transform:translateX(18px);background:#fff;}
+    ::-webkit-scrollbar{width:3px;height:3px;}
+    ::-webkit-scrollbar-thumb{background:#334155;border-radius:10px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    #result-panel{position:fixed;right: 16px;bottom:80px;width:280;z-index:45;max-height:calc(100vh - 220px);overflow-y:auto;display:none;}
+    #legend-panel{position:fixed;left:4px;bottom:80px;width:236px;z-index:44;}
+    @keyframes slideUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+    .slide-up{animation:slideUp 0.25s ease-out;}
+    .nav-active{background:#1b4332;color:#a5d0b9!important;border:1px solid rgba(165,208,185,0.2);}
+    @media(max-width:768px){
+      .leaflet-top.leaflet-left{top:76px!important;left:8px!important;}
+      #result-panel,#legend-panel{left:4px;right:auto;width:calc(100vw - 80px);}
+    }
+    @media(max-width:480px){.header-coords{display:none!important;}}
+  </style>
+  <script>
+    tailwind.config={darkMode:"class",theme:{extend:{colors:{"primary-fixed-dim":"#a5d0b9","primary-container":"#1b4332","on-primary-container":"#86af99","secondary-container":"#9f48e3","surface-variant":"#1e293b","on-surface-variant":"#94a3b8"},fontFamily:{"data-mono":["JetBrains Mono","monospace"]}}}}
+  </script>
+</head>
+<body>
+
+  <!-- MAP -->
+  <main class="fixed inset-0 z-0">
+    <div class="absolute inset-0 bg-[#000a08] tech-grid"></div>
+    <div id="map"></div>
+  </main>
+
+  <!-- HEADER -->
+  <header class="fixed top-0 left-0 right-0 h-16 flex justify-between items-center px-4 z-50 pointer-events-none">
+    <div class="flex items-center gap-3 pointer-events-auto">
+      <div class="glass-panel px-4 py-2 border-l-4 border-primary-fixed-dim">
+        <h1 class="text-sm md:text-base font-bold uppercase tracking-tighter text-primary-fixed-dim">
+          TERRAGIS <span class="font-light opacity-50">v4.0</span>
+        </h1>
+      </div>
+      <div class="hidden md:flex glass-panel px-3 py-1.5 items-center gap-2">
+        <span class="material-symbols-outlined text-sm text-primary-fixed-dim">radar</span>
+        <span class="font-data-mono text-xs text-primary-fixed-dim uppercase">Active: Kab. Barru</span>
+      </div>
+    </div>
+    <div class="flex items-center pointer-events-auto header-coords">
+      <div class="glass-panel px-3 py-1.5 flex items-center gap-4 font-data-mono text-xs">
+        <div class="flex flex-col items-end">
+          <span class="opacity-50 text-[9px] uppercase">Lat</span>
+          <span class="text-primary-fixed-dim" id="lat-val">-4.5700°</span>
+        </div>
+        <div class="flex flex-col items-end">
+          <span class="opacity-50 text-[9px] uppercase">Lon</span>
+          <span class="text-primary-fixed-dim" id="lon-val">119.7700°</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- LAYER MATRIX — kiri bawah header, tidak menutupi zoom -->
+  <aside class="fixed left-4 z-40" style="top:72px;">
+    <div class="glass-panel p-3 hud-border relative overflow-y-auto" style="width:228px;">
+      <div class="scan-line"></div>
+      <div class="flex items-center gap-2 mb-3 border-b border-white/10 pb-2">
+        <span class="material-symbols-outlined text-primary-fixed-dim" style="font-size:16px;">layers</span>
+        <h2 class="text-xs font-bold text-primary-fixed-dim uppercase tracking-wider">Layer Matrix</h2>
+      </div>
+      <div class="space-y-2.5">
+        <label class="flex items-center justify-between group cursor-pointer">
+          <span class="text-xs text-on-primary-container group-hover:text-primary-fixed-dim transition-colors">Administrasi</span>
+          <div class="toggle-switch"><input type="checkbox" checked id="tog-admin" onchange="toggleLayer('administrasi_wilayah',this.checked)"/><span class="toggle-slider"></span></div>
+        </label>
+        <label class="flex items-center justify-between group cursor-pointer">
+          <span class="text-xs text-on-primary-container group-hover:text-primary-fixed-dim transition-colors">Curah Hujan</span>
+          <div class="toggle-switch"><input type="checkbox" id="tog-ch" onchange="toggleLayer('curah_hujan',this.checked)"/><span class="toggle-slider"></span></div>
+        </label>
+        <label class="flex items-center justify-between group cursor-pointer">
+          <span class="text-xs text-on-primary-container group-hover:text-primary-fixed-dim transition-colors">Kemiringan Lereng</span>
+          <div class="toggle-switch"><input type="checkbox" id="tog-kl" onchange="toggleLayer('kemiringan_lereng',this.checked)"/><span class="toggle-slider"></span></div>
+        </label>
+        <label class="flex items-center justify-between group cursor-pointer">
+          <span class="text-xs text-on-primary-container group-hover:text-primary-fixed-dim transition-colors">Pola Ruang (RTRW)</span>
+          <div class="toggle-switch"><input type="checkbox" id="tog-pr" onchange="toggleLayer('pola_ruang',this.checked)"/><span class="toggle-slider"></span></div>
+        </label>
+        <div class="pt-2 mt-1 border-t border-white/10">
+          <label class="flex items-center justify-between group cursor-pointer">
+            <span class="text-xs font-bold text-secondary-container uppercase tracking-wide">🌱 Kesesuaian Bawang</span>
+            <div class="toggle-switch"><input type="checkbox" checked id="tog-bawang" onchange="toggleLayer('tanaman_bawang_merah',this.checked)"/><span class="toggle-slider"></span></div>
+          </label>
+        </div>
+      </div>
+      <div class="mt-3 p-2 bg-primary-container/20 border border-primary-fixed-dim/30 rounded-lg flex items-center gap-2">
+        <span id="api-dot" class="w-2 h-2 rounded-full bg-red-500 flex-shrink-0"></span>
+        <span class="font-data-mono text-[9px] text-primary-fixed-dim uppercase tracking-wider" id="api-label">Menghubungkan...</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- LEGENDA DINAMIS -->
+  <div id="legend-panel" class="glass-panel p-3 m-3 hud-border ">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-[10px] text-primary-fixed-dim font-bold uppercase tracking-widest">Legenda Aktif</span>
+      <span class="text-[9px] text-slate-500" id="legend-layer-name">Kesesuaian Lahan</span>
+    </div>
+    <div id="legend-items" class="space-y-1.5"></div>
+  </div>
+
+  <!-- RESULT PANEL -->
+  <div id="result-panel" class="glass-panel p-3 hud-border slide-up">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-[10px] text-blue-400 font-bold uppercase tracking-widest" id="result-title">Hasil</span>
+      <button onclick="closeResult()" class="text-slate-500 hover:text-red-400 transition-colors">
+        <span class="material-symbols-outlined text-sm">close</span>
+      </button>
+    </div>
+    <div id="result-content"></div>
+    <div id="chart-wrap" style="display:none;" class="mt-3">
+      <div class="border-t border-white/10 pt-2 mb-2"><span class="text-[9px] text-slate-500 uppercase tracking-widest">Chart Luas per Kelas</span></div>
+      <div style="position:relative;height:160px;"><canvas id="analyze-chart"></canvas></div>
+    </div>
+    <div id="btn-export-wrap" style="display:none;" class="mt-3 flex gap-2">
+      <button onclick="exportCSV()" class="flex-1 py-1.5 bg-primary-container/50 border border-primary-fixed-dim/30 text-primary-fixed-dim text-[10px] font-bold uppercase tracking-wider rounded flex items-center justify-center gap-1 hover:bg-primary-container transition-all">
+        <span class="material-symbols-outlined text-sm">table_view</span> CSV
+      </button>
+      <button id="btn-shp" onclick="exportSHP()" style="display:none;" class="flex-1 py-1.5 bg-blue-900/40 border border-blue-400/30 text-blue-300 text-[10px] font-bold uppercase tracking-wider rounded flex items-center justify-center gap-1 hover:bg-blue-900/60 transition-all">
+        <span class="material-symbols-outlined text-sm">map</span> SHP
+      </button>
+    </div>
+  </div>
+
+  <!-- DATA PROBE -->
+  <div id="data-probe" style="display:none;" class="fixed top-1/2 right-4 md:right-20 -translate-y-1/2 w-[300px] max-w-[90vw] z-50 glass-panel p-5 hud-border transition-all duration-300">
+    <div class="flex justify-between items-start mb-3">
+      <div class="flex-1 min-w-0 pr-2">
+        <h3 class="font-bold text-primary-fixed-dim text-base uppercase leading-tight truncate" id="probe-title">Info Lokasi</h3>
+        <p class="font-data-mono text-[10px] text-primary-fixed-dim/60 mt-0.5" id="probe-id">—</p>
+      </div>
+      <div class="px-2 py-1 bg-primary-container border border-primary-fixed-dim/40 text-primary-fixed-dim font-bold text-sm rounded flex-shrink-0" id="probe-class">—</div>
+    </div>
+    <div class="space-y-1.5 font-data-mono text-xs border-t border-white/10 pt-3" id="probe-details">
+      <p class="text-slate-500 text-center py-2">Klik area pada peta untuk melihat info lokasi.</p>
+    </div>
+    <button onclick="closeProbe()" class="mt-4 w-full py-2 bg-primary-container/50 border border-primary-fixed-dim/30 text-primary-fixed-dim text-[10px] font-bold uppercase tracking-wider rounded hover:bg-primary-container transition-all">Tutup</button>
+  </div>
+
+  <!-- TOOLBOX KANAN -->
+  <div class="fixed right-4 md:right-6 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-40">
+    <div class="glass-panel p-2 flex flex-col gap-1.5 hud-border">
+      <button id="btn-draw" class="w-11 h-11 flex items-center justify-center text-primary-fixed-dim hover:bg-primary-container transition-all rounded" title="Gambar Polygon Area" onclick="startDraw()">
+        <span class="material-symbols-outlined">pentagon</span>
+      </button>
+      <button class="w-11 h-11 flex items-center justify-center text-primary-fixed-dim hover:bg-primary-container transition-all rounded" title="Bersihkan Gambar" onclick="clearDraw()">
+        <span class="material-symbols-outlined">delete</span>
+      </button>
+      <button class="w-11 h-11 flex items-center justify-center text-primary-fixed-dim hover:bg-primary-container transition-all rounded" title="Info Titik" onclick="openProbeEmpty()">
+        <span class="material-symbols-outlined">adjust</span>
+      </button>
+      <div class="h-[1px] bg-white/10 mx-2"></div>
+      <button class="w-11 h-11 flex items-center justify-center text-secondary-container hover:bg-secondary-container/20 hover:text-white transition-all rounded" title="Rekomendasi Lahan" onclick="loadRecommendation()">
+        <span class="material-symbols-outlined">play_arrow</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- NAV BAWAH -->
+  <nav class="nav-bottom fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 glass-panel p-1.5 rounded-full shadow-2xl">
+    <button id="nav-dashboard" class="flex items-center gap-2 px-5 py-2.5 rounded-full transition-all nav-active" onclick="navClick('dashboard')">
+      <span class="material-symbols-outlined text-lg">dashboard</span>
+      <span class="font-data-mono uppercase tracking-wider text-[10px] font-bold">Dashboard</span>
+    </button>
+    <button id="nav-analisis" class="flex items-center gap-2 px-5 py-2.5 text-on-surface-variant hover:text-primary-fixed-dim rounded-full transition-all" onclick="navClick('analisis');loadRecommendation()">
+      <span class="material-symbols-outlined text-lg">query_stats</span>
+      <span class="font-data-mono uppercase tracking-wider text-[10px] font-bold">Analisis</span>
+    </button>
+    <button id="nav-ekspor" class="flex items-center gap-2 px-5 py-2.5 text-on-surface-variant hover:text-primary-fixed-dim rounded-full transition-all" onclick="navClick('ekspor');exportCSV()">
+      <span class="material-symbols-outlined text-lg">cloud_download</span>
+      <span class="font-data-mono uppercase tracking-wider text-[10px] font-bold">Ekspor</span>
+    </button>
+  </nav>
+
+  <!-- FOOTER -->
+  <footer class="fixed bottom-4 left-4 z-30 pointer-events-none">
+    <div class="glass-panel px-3 py-1 font-data-mono text-[9px] text-primary-fixed-dim flex items-center gap-2">
+      <span class="w-1.5 h-1.5 rounded-full bg-primary-fixed-dim animate-pulse"></span>
+      SYSTEM LINK STABLE // DATA SYNC ENCRYPTED
+    </div>
+  </footer>
+  <footer class="fixed bottom-4 right-4 z-30 pointer-events-none text-right">
+    <div class="font-data-mono text-[9px] text-on-surface-variant opacity-40">© 2025 TERRAGIS PRECISION<br/>AGRICULTURAL INTELLIGENCE SYSTEMS</div>
+  </footer>
+
+  <!-- TOAST -->
+  <div id="toast" style="display:none;" class="fixed bottom-20 left-1/2 -translate-x-1/2 glass-panel px-5 py-2.5 rounded-full text-xs text-primary-fixed-dim z-[999] pointer-events-none flex items-center gap-2">
+    <div class="w-3 h-3 border-2 border-primary-fixed-dim/40 border-t-primary-fixed-dim rounded-full animate-spin"></div>
+    <span id="toast-text">Memuat...</span>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script>
+    const API_BASE='http://localhost:8000';
+    const layerCache={},leafletLayers={};
+    let drawCtrl=null,isDrawing=false,lastAnalyzeData=null,lastRekoData=null,aChart=null,lastDrawnGeoJSON=null;
+
+    const SUAI_COLOR={S1:'#16a34a',S2:'#22c55e',S3:'#f59e0b',N:'#ef4444','-':'#475569',null:'#475569'};
+    const CH_COLOR=[{min:2300,max:2400,color:'#cae4b5'},{min:2400,max:2500,color:'#d9a0b2'},{min:2500,max:2600,color:'#26d6e7'},{min:2600,max:2700,color:'#796be2'},{min:2700,max:2800,color:'#cb6f9b'}];
+    const KL_COLOR={'0-3%':'#bbf7d0','3-8%':'#86efac','8-15%':'#4ade80','15-25%':'#f97316','25-45%':'#dc2626','>45%':'#7f1d1d'};
+    const POLA_COLOR={'Kawasan Hortikultura':'#86efac','Kawasan Ketahanan Pangan':'#4ade80','Kawasan Permukiman Perdesaan':'#fde68a','Kawasan Permukiman Perkotaan':'#fbbf24','Kawasan Perkebunan':'#6ee7b7','Kawasan Hutan Lindung':'#166534','Kawasan Hutan Produksi Terbatas':'#15803d','Kawasan Konservasi':'#064e3b','Kawasan Perlindungan Setempat':'#065f46','Kawasan Ekosistem Mangrove':'#047857','Kawasan Perikanan Budidaya':'#0891b2','Kawasan Pariwisata':'#a78bfa','Kawasan Peruntukan Industri':'#f472b6','Kawasan Transportasi':'#9ca3af','Kawasan Pertambangan Mineral Logam':'#b45309','Badan Air':'#38bdf8'};
+
+    function getCHColor(v){const n=parseFloat(v);for(const c of CH_COLOR)if(n>=c.min&&n<c.max)return c.color;return '#64748b';}
+
+    // PETA — satelit default, zoom control posisi kanan atas tidak bentrok
+    const map=L.map('map',{center:[-4.57,119.77],zoom:11,zoomControl:true,preferCanvas:true});
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'&copy; Esri',maxZoom:19}).addTo(map);
+
+    map.on('mousemove',function(e){
+      document.getElementById('lat-val').textContent=e.latlng.lat.toFixed(5)+'°';
+      document.getElementById('lon-val').textContent=e.latlng.lng.toFixed(5)+'°';
+    });
+
+    const drawnItems=new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    async function checkApi(){
+      try{
+        const r=await fetch(`${API_BASE}/layers`,{signal:AbortSignal.timeout(4000)});
+        if(r.ok){
+          const dot=document.getElementById('api-dot');
+          dot.className='w-2 h-2 rounded-full bg-green-400 flex-shrink-0';
+          dot.style.boxShadow='0 0 6px #22c55e';
+          document.getElementById('api-label').textContent='API Terhubung';
+        }else throw 0;
+      }catch{
+        document.getElementById('api-dot').className='w-2 h-2 rounded-full bg-red-500 flex-shrink-0';
+        document.getElementById('api-label').textContent='API Offline';
+      }
+    }
+
+    let toastTimer=null;
+    function showToast(t,auto=false){document.getElementById('toast-text').textContent=t;document.getElementById('toast').style.display='flex';clearTimeout(toastTimer);if(auto)toastTimer=setTimeout(hideToast,3000);}
+    function hideToast(){document.getElementById('toast').style.display='none';}
+
+    async function loadLayer(name){
+      if(layerCache[name])return layerCache[name];
+      showToast(`Memuat ${name.replace(/_/g,' ')}...`);
+      try{
+        const res=await fetch(`${API_BASE}/layer/${name}/geojson`);
+        if(!res.ok)throw new Error(`HTTP ${res.status}`);
+        const data=await res.json();
+        if(data.status==='error')throw new Error(data.message);
+        layerCache[name]=data;
+        return data;
+      }catch(e){showToast(`Gagal: ${e.message}`,true);return null;}
+      finally{hideToast();}
+    }
+
+    function getStyle(name){
+      return function(f){
+        const p=f.properties;
+        if(name==='tanaman_bawang_merah'){const k=p.kelas_kesesuaian||p.suai_lahan||'-';return{fillColor:SUAI_COLOR[k]||'#475569',color:'#0f172a',weight:0.4,fillOpacity:0.75};}
+        if(name==='curah_hujan')return{fillColor:getCHColor(p.nilai_curah_hujan||p.CH||0),color:'#0f172a',weight:0.4,fillOpacity:0.65};
+        if(name==='kemiringan_lereng'){const k=p.kelas_kemiringan||p.KL||'';return{fillColor:KL_COLOR[k]||'#334155',color:'#0f172a',weight:0.2,fillOpacity:0.7};}
+        if(name==='pola_ruang'){const z=p.zona||p.NAMOBJ||'';return{fillColor:POLA_COLOR[z]||'#334155',color:'#0f172a',weight:0.2,fillOpacity:0.65};}
+        if(name==='administrasi_wilayah')return{fillColor:'transparent',color:'#818cf8',weight:2,dashArray:'5 4',fillOpacity:0};
+        return{color:'#64748b',weight:1,fillOpacity:0.4};
+      };
+    }
+
+    function onEach(name){
+      return function(f,layer){
+        layer.on('click',function(e){L.DomEvent.stopPropagation(e);showInfo(name,f.properties,e.latlng);});
+        if(name!=='administrasi_wilayah'){
+          layer.on('mouseover',function(){layer.setStyle({weight:1.8,color:'#fff'});layer.bringToFront();});
+          layer.on('mouseout',function(){leafletLayers[name]?.resetStyle(layer);});
+        }
+      };
+    }
+
+    async function toggleLayer(name,on){
+      if(on){
+        if(leafletLayers[name]){map.addLayer(leafletLayers[name]);updateLegend(name);return;}
+        const data=await loadLayer(name);
+        if(!data)return;
+        const layer=L.geoJSON(data,{style:getStyle(name),onEachFeature:onEach(name),pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:5,...getStyle(name)(f)})});
+        leafletLayers[name]=layer;
+        layer.addTo(map);
+        if(name!=='tanaman_bawang_merah'){try{map.fitBounds(layer.getBounds(),{padding:[20,20],maxZoom:13});}catch(e){}}
+        updateLegend(name);
+      }else{
+        if(leafletLayers[name])map.removeLayer(leafletLayers[name]);
+        updateLegend('tanaman_bawang_merah');
+      }
+    }
+
+    const LEGEND_DATA={
+      tanaman_bawang_merah:{name:'Kesesuaian Lahan',items:[{color:'#16a34a',label:'S1 — Sangat Sesuai'},{color:'#22c55e',label:'S2 — Cukup Sesuai'},{color:'#f59e0b',label:'S3 — Marginal'},{color:'#ef4444',label:'N — Tidak Sesuai'},{color:'#475569',label:'Tidak Ada Data'}]},
+      curah_hujan:{name:'Curah Hujan (mm/th)',items:[{color:'#cae4b5',label:'2300–2400'},{color:'#d9a0b2',label:'2400–2500'},{color:'#26d6e7',label:'2500–2600'},{color:'#796be2',label:'2600–2700'},{color:'#cb6f9b',label:'2700–2800'}]},
+      kemiringan_lereng:{name:'Kemiringan Lereng',items:[{color:'#bbf7d0',label:'0–3% Datar'},{color:'#86efac',label:'3–8% Landai'},{color:'#4ade80',label:'8–15% Agak Miring'},{color:'#f97316',label:'15–25% Miring'},{color:'#dc2626',label:'25–45% Curam'},{color:'#7f1d1d',label:'>45% Sangat Curam'}]},
+      pola_ruang:{name:'Pola Ruang (RTRW)',items:[{color:'#86efac',label:'Kawasan Hortikultura'},{color:'#4ade80',label:'Ketahanan Pangan'},{color:'#fde68a',label:'Permukiman Perdesaan'},{color:'#fbbf24',label:'Permukiman Perkotaan'},{color:'#166534',label:'Hutan Lindung'},{color:'#064e3b',label:'Kawasan Konservasi'},{color:'#38bdf8',label:'Badan Air'}]},
+      administrasi_wilayah:{name:'Administrasi Wilayah',items:[{color:'#818cf8',label:'Batas Desa (garis)',border:true}]}
+    };
+
+    function updateLegend(name){
+      const d=LEGEND_DATA[name];
+      if(!d)return;
+      document.getElementById('legend-layer-name').textContent=d.name;
+      document.getElementById('legend-items').innerHTML=d.items.map(i=>
+        `<div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-sm flex-shrink-0" style="${i.border?'background:transparent;border:2px solid '+i.color:('background:'+i.color)}"></span>
+          <span class="text-[10px] text-slate-300">${i.label}</span>
+        </div>`
+      ).join('');
+    }
+
+    function showInfo(name,p,latlng){
+      const probe=document.getElementById('data-probe');
+      let rows=[];
+      if(name==='administrasi_wilayah'){
+        document.getElementById('probe-title').textContent=p.nama_desa||p.WADMKD||'Desa';
+        document.getElementById('probe-id').textContent='Kec. '+(p.kecamatan||p.WADMKC||'-');
+        document.getElementById('probe-class').textContent='ADM';
+        document.getElementById('probe-class').style.color='';
+        rows=[['Desa',p.nama_desa||'-'],['Kecamatan',p.kecamatan||p.WADMKC||'-']];
+      }else if(name==='curah_hujan'){
+        document.getElementById('probe-title').textContent='Curah Hujan';
+        document.getElementById('probe-id').textContent='ID: '+(p.id||'-');
+        document.getElementById('probe-class').textContent=(p.nilai_curah_hujan||p.CH||'-')+' mm';
+        document.getElementById('probe-class').style.color='';
+        rows=[['Nilai',(p.nilai_curah_hujan||p.CH||'-')+' mm/tahun']];
+      }else if(name==='kemiringan_lereng'){
+        const k=p.kelas_kemiringan||p.KL||'-';
+        const lb={'0-3%':'Datar','3-8%':'Landai','8-15%':'Agak Miring','15-25%':'Miring','25-45%':'Curam','>45%':'Sangat Curam'}[k]||'-';
+        document.getElementById('probe-title').textContent='Kemiringan Lereng';
+        document.getElementById('probe-id').textContent='ID: '+(p.id||'-');
+        document.getElementById('probe-class').textContent=k;
+        document.getElementById('probe-class').style.color='';
+        rows=[['Kelas',k+' — '+lb]];
+      }else if(name==='pola_ruang'){
+        document.getElementById('probe-title').textContent='Pola Ruang';
+        document.getElementById('probe-id').textContent='ID: '+(p.id||'-');
+        document.getElementById('probe-class').textContent='RTRW';
+        document.getElementById('probe-class').style.color='';
+        rows=[['Zona',p.zona||p.NAMOBJ||'-']];
+      }else{
+        const k=p.kelas_kesesuaian||p.suai_lahan||'—';
+        const lb={S1:'Sangat Sesuai',S2:'Cukup Sesuai',S3:'Marginal',N:'Tidak Sesuai'}[k]||'Tidak Ada Data';
+        document.getElementById('probe-title').textContent='Kesesuaian Lahan';
+        document.getElementById('probe-id').textContent='ID: '+(p.id||'-');
+        document.getElementById('probe-class').textContent=k;
+        document.getElementById('probe-class').style.color=SUAI_COLOR[k]||'#475569';
+        rows=[['Kelas',`<span style="color:${SUAI_COLOR[k]||'#94a3b8'}">${k} — ${lb}</span>`]];
+        if(p.pembatas)rows.push(['Pembatas',p.pembatas]);
+        if(p.pH)rows.push(['pH Tanah',p.pH]);
+        if(p.Drainase)rows.push(['Drainase',p.Drainase]);
+        if(p.Tekstur)rows.push(['Tekstur',p.Tekstur]);
+      }
+      if(latlng)rows.push(['Koordinat',`<span class="font-mono text-[9px]">${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}</span>`]);
+      document.getElementById('probe-details').innerHTML=rows.map(([k,v])=>
+        `<div class="flex justify-between gap-2 py-0.5 border-b border-white/5 last:border-0">
+          <span class="text-slate-500 text-[10px] flex-shrink-0">${k}:</span>
+          <span class="text-primary-fixed-dim text-[10px] text-right">${v}</span>
+        </div>`
+      ).join('');
+      probe.style.display='block';
+      if(latlng&&name!=='tanaman_bawang_merah')querySuitability(latlng.lat,latlng.lng);
+    }
+
+    function closeProbe(){document.getElementById('data-probe').style.display='none';}
+    function openProbeEmpty(){
+      document.getElementById('data-probe').style.display='block';
+      document.getElementById('probe-title').textContent='Info Lokasi';
+      document.getElementById('probe-id').textContent='Klik area pada peta';
+      document.getElementById('probe-class').textContent='—';
+      document.getElementById('probe-class').style.color='';
+      document.getElementById('probe-details').innerHTML='<p class="text-slate-500 text-center py-3 text-xs">Klik area pada peta untuk melihat info lokasi.</p>';
+    }
+
+    map.on('click',function(e){
+      if(isDrawing)return;
+      document.getElementById('data-probe').style.display='block';
+      document.getElementById('probe-title').textContent='Mengambil Info...';
+      document.getElementById('probe-id').textContent=e.latlng.lat.toFixed(5)+', '+e.latlng.lng.toFixed(5);
+      document.getElementById('probe-class').textContent='...';
+      document.getElementById('probe-class').style.color='';
+      document.getElementById('probe-details').innerHTML='<div class="flex justify-center py-3"><div class="w-4 h-4 border-2 border-primary-fixed-dim/40 border-t-primary-fixed-dim rounded-full animate-spin"></div></div>';
+      querySuitabilityFull(e.latlng.lat,e.latlng.lng);
+    });
+
+    async function querySuitabilityFull(lat,lon){
+      try{
+        const res=await fetch(`${API_BASE}/suitability?lat=${lat}&lon=${lon}`);
+        const json=await res.json();
+        if(json.status!=='success'||!json.data)throw new Error('No data');
+        const d=json.data;
+        showInfo('tanaman_bawang_merah',{kelas_kesesuaian:d.kelas_kesesuaian,pembatas:d.pembatas,pH:d.pH,Drainase:d.Drainase,Tekstur:d.Tekstur,id:d.id},{lat,lng:lon});
+        const details=document.getElementById('probe-details');
+        let extra='<div class="border-t border-white/10 pt-2 mt-1 space-y-0.5">';
+        if(d.nama_desa)extra+=rowHtml('Desa',d.nama_desa);
+        if(d.kecamatan)extra+=rowHtml('Kecamatan',d.kecamatan);
+        if(d.nilai_curah_hujan)extra+=rowHtml('Curah Hujan',d.nilai_curah_hujan+' mm/th');
+        if(d.kelas_kemiringan)extra+=rowHtml('Kemiringan',d.kelas_kemiringan);
+        if(d.pola_ruang)extra+=rowHtml('Pola Ruang',d.pola_ruang);
+        extra+=rowHtml('Koordinat',`<span class="font-mono text-[9px]">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>`);
+        extra+='</div>';
+        details.insertAdjacentHTML('beforeend',extra);
+      }catch{
+        document.getElementById('probe-title').textContent='Info Lokasi';
+        document.getElementById('probe-id').textContent='API tidak terhubung';
+        document.getElementById('probe-class').textContent='—';
+        document.getElementById('probe-details').innerHTML=`<p class="text-[10px] text-slate-500 text-center py-2">Koordinat: ${lat.toFixed(5)}, ${lon.toFixed(5)}<br/>Tidak ada data dari API.</p>`;
+      }
+    }
+
+    async function querySuitability(lat,lon){
+      try{
+        const res=await fetch(`${API_BASE}/suitability?lat=${lat}&lon=${lon}`);
+        const json=await res.json();
+        if(json.status!=='success'||!json.data)return;
+        const d=json.data;
+        const k=d.kelas_kesesuaian;
+        let extra='<div class="border-t border-white/10 pt-2 mt-1 space-y-0.5"><p class="text-[9px] text-blue-400 font-bold uppercase mb-1">Analisis Spasial</p>';
+        if(k)extra+=rowHtml('Kesesuaian',`<span style="color:${SUAI_COLOR[k]||'#94a3b8'}">${k}</span>`);
+        if(d.nama_desa)extra+=rowHtml('Desa',d.nama_desa);
+        if(d.nilai_curah_hujan)extra+=rowHtml('Curah Hujan',d.nilai_curah_hujan+' mm/th');
+        if(d.kelas_kemiringan)extra+=rowHtml('Kemiringan',d.kelas_kemiringan);
+        if(d.pola_ruang)extra+=rowHtml('Pola Ruang',d.pola_ruang);
+        extra+='</div>';
+        document.getElementById('probe-details').insertAdjacentHTML('beforeend',extra);
+      }catch{}
+    }
+
+    function rowHtml(k,v){return `<div class="flex justify-between gap-2 py-0.5"><span class="text-slate-500 text-[10px]">${k}:</span><span class="text-primary-fixed-dim text-[10px] text-right">${v}</span></div>`;}
+
+    function startDraw(){
+      clearDraw();isDrawing=true;
+      drawCtrl=new L.Draw.Polygon(map,{shapeOptions:{color:'#22c55e',fillColor:'#22c55e',fillOpacity:0.5,weight:2,dashArray:'6 3'}});
+      drawCtrl.enable();
+      document.getElementById('btn-draw').innerHTML='<div class="w-4 h-4 border-2 border-blue-400/40 border-t-blue-400 rounded-full animate-spin"></div>';
+      document.getElementById('btn-draw').disabled=true;
+      showToast('Klik untuk titik, double klik untuk selesai...');
+    }
+
+    map.on(L.Draw.Event.CREATED,async function(e){
+      isDrawing=false;
+      document.getElementById('btn-draw').innerHTML='<span class="material-symbols-outlined">pentagon</span>';
+      document.getElementById('btn-draw').disabled=false;
+      hideToast();drawnItems.addLayer(e.layer);
+      lastDrawnGeoJSON=e.layer.toGeoJSON();
+      await analyzePolygon(lastDrawnGeoJSON);
+    });
+
+    async function analyzePolygon(geojson){
+      showToast('Menganalisis polygon...');
+      showResult('Analisis Polygon','<div class="flex justify-center py-3"><div class="w-4 h-4 border-2 border-blue-400/40 border-t-blue-400 rounded-full animate-spin"></div></div>',false);
+      try{
+        const res=await fetch(`${API_BASE}/analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({coordinates:geojson.geometry.coordinates})});
+        const data=await res.json();
+        if(data.status==='error')throw new Error(data.message);
+        lastAnalyzeData=data.results||[];
+        renderAnalyzeResult(lastAnalyzeData);
+      }catch(e){showResult('Analisis Polygon',`<p class="text-xs text-red-400">Gagal: ${e.message}</p>`,false);}
+      finally{hideToast();}
+    }
+
+    function renderAnalyzeResult(rows){
+      const total=rows.reduce((s,r)=>s+(parseFloat(r.luas_hektar)||0),0);
+      if(!rows.length){
+        showResult('Analisis Polygon','<p class="text-xs text-slate-500 text-center py-2">Tidak ada data di area ini.</p>',false);
+        document.getElementById('chart-wrap').style.display='none';
+        return;
+      }
+      // Tabel ringkasan
+      let html='<div class="space-y-1.5">';
+      rows.forEach(r=>{
+        const k=r.kelas||'-',luas=parseFloat(r.luas_hektar||0).toFixed(2),pct=total>0?((r.luas_hektar/total)*100).toFixed(1):0,barW=total>0?(r.luas_hektar/total)*100:0;
+        html+=`<div><div class="flex items-center justify-between mb-0.5"><div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-sm" style="background:${SUAI_COLOR[k]||'#475569'}"></span><span class="text-[10px] font-medium">${k}</span></div><span class="text-[10px] font-mono text-blue-400">${luas} ha <span class="text-slate-500">(${pct}%)</span></span></div><div class="h-1 bg-slate-700 rounded-full overflow-hidden"><div class="h-full rounded-full" style="width:${barW}%;background:${SUAI_COLOR[k]||'#475569'}"></div></div></div>`;
+      });
+      html+=`<div class="border-t border-white/10 pt-1.5 mt-1.5 flex justify-between"><span class="text-[9px] text-slate-500 uppercase">Total</span><span class="text-[10px] font-mono font-bold text-primary-fixed-dim">${total.toFixed(2)} ha</span></div></div>`;
+      showResult('Analisis Polygon',html,true);
+      // Bar chart
+      document.getElementById('chart-wrap').style.display='block';
+      if(aChart)aChart.destroy();
+      const ctx=document.getElementById('analyze-chart').getContext('2d');
+      aChart=new Chart(ctx,{
+        type:'bar',
+        data:{
+          labels:rows.map(r=>r.kelas||'-'),
+          datasets:[{
+            label:'Luas (ha)',
+            data:rows.map(r=>parseFloat(r.luas_hektar)||0),
+            backgroundColor:rows.map(r=>SUAI_COLOR[r.kelas]||'#475569'),
+            borderRadius:4,
+            borderSkipped:false
+          }]
+        },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{
+            legend:{display:false},
+            tooltip:{callbacks:{label:c=>' '+c.parsed.y.toFixed(2)+' ha'}}
+          },
+          scales:{
+            x:{ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'rgba(255,255,255,0.05)'}},
+            y:{ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'rgba(255,255,255,0.05)'},title:{display:true,text:'ha',color:'#64748b',font:{size:9}}}
+          }
+        }
+      });
+    }
+
+    function clearDraw(){
+      drawnItems.clearLayers();if(drawCtrl)drawCtrl.disable();isDrawing=false;closeResult();
+      document.getElementById('btn-draw').innerHTML='<span class="material-symbols-outlined">pentagon</span>';
+      document.getElementById('btn-draw').disabled=false;
+    }
+
+    async function loadRecommendation(){
+      showToast('Menghitung rekomendasi...');
+      showResult('Rekomendasi Lahan','<div class="flex justify-center py-3"><div class="w-4 h-4 border-2 border-green-400/40 border-t-green-400 rounded-full animate-spin"></div></div>',false);
+      try{
+        const res=await fetch(`${API_BASE}/recommendation`);
+        const json=await res.json();
+        if(json.status==='error')throw new Error(json.message);
+        lastRekoData=json.rekomendasi||[];
+        renderRekoResult(lastRekoData);
+      }catch(e){showResult('Rekomendasi Lahan',`<p class="text-xs text-red-400">Gagal: ${e.message}</p>`,false);}
+      finally{hideToast();}
+    }
+
+    function renderRekoResult(data){
+      if(!data.length){showResult('Rekomendasi Lahan','<p class="text-xs text-slate-500 text-center py-2">Tidak ada data rekomendasi.</p>',false);return;}
+      let html='<div class="space-y-1.5">';
+      data.forEach((r,i)=>{
+        const k=r.kelas_kesesuaian||'-';
+        html+=`<div class="flex items-center gap-2 py-1.5 border-b border-white/5 last:border-0"><span class="text-[9px] text-slate-600 w-3 flex-shrink-0 font-bold">${i+1}</span><div class="flex-1 min-w-0"><p class="text-[10px] font-semibold truncate">${r.nama_desa||'-'}</p><div class="flex items-center gap-1 mt-0.5"><span class="w-1.5 h-1.5 rounded-full" style="background:${SUAI_COLOR[k]||'#475569'}"></span><span class="text-[9px] text-slate-500">${k}</span></div></div><span class="text-[10px] font-bold font-mono text-green-400 flex-shrink-0">${parseFloat(r.luas_total_hektar||0).toFixed(1)} ha</span></div>`;
+      });
+      html+='</div>';
+      showResult('Rekomendasi Lahan',html,true);
+    }
+
+    function showResult(title,content,showExport,showChart=false){
+      document.getElementById('result-title').textContent=title;
+      document.getElementById('result-content').innerHTML=content;
+      document.getElementById('btn-export-wrap').style.display=showExport?'flex':'none';
+      document.getElementById('btn-shp').style.display=(showExport&&lastDrawnGeoJSON)?'flex':'none';
+      if(!showChart){document.getElementById('chart-wrap').style.display='none';if(aChart){aChart.destroy();aChart=null;}}
+      const p=document.getElementById('result-panel');
+      p.style.display='block';p.classList.remove('slide-up');void p.offsetWidth;p.classList.add('slide-up');
+    }
+    function closeResult(){document.getElementById('result-panel').style.display='none';document.getElementById('chart-wrap').style.display='none';document.getElementById('btn-export-wrap').style.display='none';if(aChart){aChart.destroy();aChart=null;}lastAnalyzeData=null;lastRekoData=null;lastDrawnGeoJSON=null;}
+
+    function exportCSV(){
+      let csv='',filename='';
+      if(lastAnalyzeData&&lastAnalyzeData.length){
+        const total=lastAnalyzeData.reduce((s,r)=>s+(parseFloat(r.luas_hektar)||0),0);
+        csv='Kelas Kesesuaian,Luas (ha),Persentase (%)\n';
+        lastAnalyzeData.forEach(r=>{csv+=`${r.kelas||'-'},${parseFloat(r.luas_hektar||0).toFixed(2)},${total>0?((r.luas_hektar/total)*100).toFixed(1):0}\n`;});
+        csv+=`TOTAL,${total.toFixed(2)},100\n`;
+        filename='analisis_polygon_kesesuaian_lahan.csv';
+      }else if(lastRekoData&&lastRekoData.length){
+        csv='No,Nama Desa,Kelas Kesesuaian,Luas Total (ha)\n';
+        lastRekoData.forEach((r,i)=>{csv+=`${i+1},${r.nama_desa||'-'},${r.kelas_kesesuaian||'-'},${parseFloat(r.luas_total_hektar||0).toFixed(2)}\n`;});
+        filename='rekomendasi_lahan_bawang_merah.csv';
+      }else if(layerCache['tanaman_bawang_merah']){
+        const features=layerCache['tanaman_bawang_merah'].features||[];
+        if(features.length){
+          const keys=Object.keys(features[0].properties||{}).filter(k=>k!=='geom');
+          csv=keys.join(',')+'\n';
+          features.forEach(f=>{csv+=keys.map(k=>String(f.properties[k]||'-').replace(/,/g,' ')).join(',')+'\n';});
+          filename='data_kesesuaian_lahan_full.csv';
+        }
+      }
+      if(!csv){showToast('Tidak ada data untuk diekspor.',true);return;}
+      const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);
+      showToast('✓ File CSV berhasil diunduh!',true);
+    }
+
+    // ── SHAPEFILE WRITER (manual, tanpa library eksternal) ──────────
+    // ── SHAPEFILE WRITER (manual binary, tanpa library eksternal) ─────
+    function w32be(v,o,n){v.setInt32(o,n,false);}
+    function w32le(v,o,n){v.setInt32(o,n,true);}
+    function w64le(v,o,n){v.setFloat64(o,n,true);}
+
+    function buildSHP(rings){
+      // Hitung jumlah titik dan bbox
+      let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+      let numPoints=0;
+      rings.forEach(ring=>{
+        numPoints+=ring.length;
+        ring.forEach(([x,y])=>{
+          if(x<minX)minX=x; if(x>maxX)maxX=x;
+          if(y<minY)minY=y; if(y>maxY)maxY=y;
+        });
+      });
+      const numParts=rings.length;
+
+      // Hitung ukuran record content (bytes):
+      // 4 (shapeType) + 32 (bbox) + 4 (numParts) + 4 (numPoints)
+      // + 4*numParts (parts index) + 16*numPoints (XY points)
+      const recBytes = 4 + 32 + 4 + 4 + (4*numParts) + (16*numPoints);
+      // Total file = 100 (header) + 8 (rec header) + recBytes
+      const totalBytes = 100 + 8 + recBytes;
+
+      const buf = new ArrayBuffer(totalBytes);
+      const v = new DataView(buf);
+
+      // === FILE HEADER (100 bytes) ===
+      w32be(v,0,9994);                    // file code
+      w32be(v,4,0);w32be(v,8,0);w32be(v,12,0);w32be(v,16,0);w32be(v,20,0); // unused
+      w32be(v,24,(totalBytes/2));         // file length in 16-bit words
+      w32le(v,28,1000);                   // version
+      w32le(v,32,5);                      // shape type: Polygon
+      w64le(v,36,minX); w64le(v,44,minY);
+      w64le(v,52,maxX); w64le(v,60,maxY);
+      w64le(v,68,0); w64le(v,76,0);      // Z range (unused)
+      w64le(v,84,0); w64le(v,92,0);      // M range (unused)
+
+      // === RECORD HEADER (8 bytes at offset 100) ===
+      w32be(v,100,1);                     // record number (1-based)
+      w32be(v,104,recBytes/2);            // content length in 16-bit words
+
+      // === RECORD CONTENT (starts at offset 108) ===
+      let o=108;
+      w32le(v,o,5); o+=4;               // shape type: Polygon
+      w64le(v,o,minX); o+=8;
+      w64le(v,o,minY); o+=8;
+      w64le(v,o,maxX); o+=8;
+      w64le(v,o,maxY); o+=8;
+      w32le(v,o,numParts); o+=4;
+      w32le(v,o,numPoints); o+=4;
+
+      // Parts index array
+      let ptIdx=0;
+      rings.forEach(ring=>{
+        w32le(v,o,ptIdx); o+=4;
+        ptIdx+=ring.length;
+      });
+
+      // Points array
+      rings.forEach(ring=>{
+        ring.forEach(([x,y])=>{
+          w64le(v,o,x); o+=8;
+          w64le(v,o,y); o+=8;
+        });
+      });
+
+      return buf;
+    }
+
+    function buildSHX(recBytes){
+      // recBytes = content bytes of the one record (NOT including record header)
+      const buf=new ArrayBuffer(108); // 100 header + 8 for one record
+      const v=new DataView(buf);
+      w32be(v,0,9994);
+      w32be(v,4,0);w32be(v,8,0);w32be(v,12,0);w32be(v,16,0);w32be(v,20,0);
+      w32be(v,24,54);  // file length: (100+8)/2 = 54 words
+      w32le(v,28,1000);
+      w32le(v,32,5);
+      // bbox (zeros ok for SHX)
+      for(let i=36;i<100;i+=8)v.setFloat64(i,0,true);
+      // one index record: offset=50 words (100 bytes), content length in words
+      w32be(v,100,50);             // offset of record 1 in SHP (in 16-bit words)
+      w32be(v,104,recBytes/2);     // content length of record 1
+      return buf;
+    }
+
+    function buildDBF(luas_ha,tanggal){
+      const fields=[
+        {name:'NAMA',     type:'C',len:20,dec:0},
+        {name:'TANGGAL',  type:'C',len:10,dec:0},
+        {name:'LUAS_HA',  type:'N',len:12,dec:2}
+      ];
+      const recLen=1+fields.reduce((s,f)=>s+f.len,0); // 1 = deletion flag
+      const headerLen=32+(fields.length*32)+1;
+      const buf=new ArrayBuffer(headerLen+recLen+1);
+      const v=new DataView(buf);
+      const enc=new TextEncoder();
+
+      // Header
+      v.setUint8(0,3);
+      const now=new Date();
+      v.setUint8(1,now.getFullYear()-1900);
+      v.setUint8(2,now.getMonth()+1);
+      v.setUint8(3,now.getDate());
+      v.setUint32(4,1,true);            // num records
+      v.setUint16(8,headerLen,true);
+      v.setUint16(10,recLen,true);
+      for(let i=12;i<32;i++)v.setUint8(i,0); // reserved
+
+      // Field descriptors
+      let fo=32;
+      fields.forEach(f=>{
+        const nb=enc.encode(f.name);
+        for(let i=0;i<11;i++)v.setUint8(fo+i, i<nb.length ? nb[i] : 0);
+        v.setUint8(fo+11,f.type.charCodeAt(0));
+        for(let i=12;i<16;i++)v.setUint8(fo+i,0); // address
+        v.setUint8(fo+16,f.len);
+        v.setUint8(fo+17,f.dec);
+        for(let i=18;i<32;i++)v.setUint8(fo+i,0);
+        fo+=32;
+      });
+      v.setUint8(fo,0x0D); fo++; // header terminator
+
+      // One data record
+      v.setUint8(fo,0x20); fo++; // not deleted
+      const vals=[
+        'Area Analisis'.substring(0,20).padEnd(20),
+        String(tanggal).substring(0,10).padEnd(10),
+        String(parseFloat(luas_ha).toFixed(2)).substring(0,12).padStart(12)
+      ];
+      fields.forEach((f,i)=>{
+        const bytes=enc.encode(vals[i]);
+        for(let j=0;j<f.len;j++)v.setUint8(fo+j, j<bytes.length ? bytes[j] : 0x20);
+        fo+=f.len;
+      });
+      v.setUint8(fo,0x1A); // EOF marker
+      return buf;
+    }
+
+    function buildPRJ(){
+      return 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
+    }
+
+    async function exportSHP(){
+      if(!lastDrawnGeoJSON){showToast('Gambar polygon terlebih dahulu.',true);return;}
+      try{
+        showToast('Membuat shapefile...');
+        const geom=lastDrawnGeoJSON.geometry;
+        let rings=[];
+        if(geom.type==='Polygon') rings=geom.coordinates;
+        else if(geom.type==='MultiPolygon') rings=geom.coordinates.flat();
+        if(!rings.length){showToast('Geometri tidak valid.',true);return;}
+
+        const luas_ha=lastAnalyzeData
+          ? lastAnalyzeData.reduce((s,r)=>s+(parseFloat(r.luas_hektar)||0),0).toFixed(2)
+          : '0';
+        const tanggal=new Date().toISOString().split('T')[0];
+
+        // Hitung recBytes untuk SHX
+        const numPoints=rings.reduce((s,r)=>s+r.length,0);
+        const recBytes=4+32+4+4+(4*rings.length)+(16*numPoints);
+
+        const shpBuf=buildSHP(rings);
+        const shxBuf=buildSHX(recBytes);
+        const dbfBuf=buildDBF(luas_ha,tanggal);
+        const prjStr=buildPRJ();
+
+        const zip=new JSZip();
+        const folder=zip.folder('polygon_kesesuaian_lahan');
+        folder.file('polygon_area.shp', shpBuf);
+        folder.file('polygon_area.shx', shxBuf);
+        folder.file('polygon_area.dbf', dbfBuf);
+        folder.file('polygon_area.prj', prjStr);
+        folder.file('polygon_area.geojson', JSON.stringify({
+          type:'FeatureCollection',
+          features:[{type:'Feature',geometry:lastDrawnGeoJSON.geometry,
+            properties:{NAMA:'Area Analisis',TANGGAL:tanggal,LUAS_HA:parseFloat(luas_ha)}}]
+        },null,2));
+
+        const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE'});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url; a.download='polygon_kesesuaian_lahan.zip'; a.click();
+        URL.revokeObjectURL(url);
+        hideToast();
+        showToast('✓ Shapefile berhasil diunduh!',true);
+      }catch(err){
+        hideToast();
+        showToast('Gagal: '+err.message,true);
+        console.error('exportSHP error:',err);
+      }
+    }
+    function navClick(id){
+      ['dashboard','analisis','ekspor'].forEach(n=>{
+        const btn=document.getElementById('nav-'+n);
+        if(btn)btn.className='flex items-center gap-2 px-5 py-2.5 text-on-surface-variant hover:text-primary-fixed-dim rounded-full transition-all';
+      });
+      const active=document.getElementById('nav-'+id);
+      if(active)active.className='flex items-center gap-2 px-5 py-2.5 rounded-full transition-all nav-active';
+    }
+
+    document.addEventListener('DOMContentLoaded',async()=>{
+      await checkApi();
+      await toggleLayer('tanaman_bawang_merah',true);
+      await toggleLayer('administrasi_wilayah',true);
+      updateLegend('tanaman_bawang_merah');
+    });
+
+    window.toggleLayer=toggleLayer;window.startDraw=startDraw;window.clearDraw=clearDraw;
+    window.loadRecommendation=loadRecommendation;window.closeProbe=closeProbe;
+    window.openProbeEmpty=openProbeEmpty;window.closeResult=closeResult;
+    window.exportCSV=exportCSV;window.exportSHP=exportSHP;window.navClick=navClick;window.map=map;
+  </script>
+</body>
+</html>
