@@ -13,6 +13,7 @@ Sistem Informasi Geografis berbasis web untuk analisis kesesuaian lahan tanaman 
 cd backend
 pip install -r requirements.txt
 python main.py
+```
 
 ### 2. Frontend
 - Buka frontend/index.html dengan Live Server
