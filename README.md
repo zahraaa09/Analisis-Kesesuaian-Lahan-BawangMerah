@@ -26,8 +26,8 @@ python main.py
 - Dashboard chart
 
 👥 Tim
-Zahra Aulia Putri (H071241025)
-Dewi Astuti Muchtar (H071241034)
-Syahrani Zakiyah Nurfaizah (H071241042)
+- Zahra Aulia Putri (H071241025)
+- Dewi Astuti Muchtar (H071241034)
+- Syahrani Zakiyah Nurfaizah (H071241042)
 
 ---
