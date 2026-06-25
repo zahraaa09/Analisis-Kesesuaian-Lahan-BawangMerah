@@ -30,7 +30,6 @@ async def get_layers():
     ]
     return {"status": "success", "data": layers}
 
-
 @app.get("/layer/{layer_name}/geojson")
 async def get_layer_geojson(layer_name: str):
     table_map = {
@@ -52,7 +51,13 @@ async def get_layer_geojson(layer_name: str):
         query = f"""
         SELECT json_build_object(
             'type', 'FeatureCollection',
-            'features', json_agg(ST_AsGeoJSON(t.*)::json)
+            'features', json_agg(
+                json_build_object(
+                    'type', 'Feature',
+                    'geometry', ST_AsGeoJSON(ST_SimplifyPreserveTopology(t.geom, 0.001))::json,
+                    'properties', to_jsonb(t) - 'geom'
+                )
+            )
         ) as geojson
         FROM (SELECT * FROM {table}) t;
         """
@@ -116,7 +121,6 @@ async def analyze_polygon(data: dict):
         coordinates = data.get("coordinates")
         if not coordinates:
             return {"status": "error", "message": "Koordinat tidak ditemukan"}
-        
         coords_list = coordinates[0]
         coords_str = ", ".join([f"{p[0]} {p[1]}" for p in coords_list])
         polygon_wkt = f"POLYGON(({coords_str}))"
@@ -176,18 +180,61 @@ async def get_recommendation(limit: int = 10):
         cur.close()
         conn.close()
         
+        rekomendasi = []
+        if rows:
+            for row in rows:
+                rekomendasi.append({
+                    "nama_desa": str(row[0]) if row[0] else "-",
+                    "kelas_kesesuaian": str(row[1]) if row[1] else "-",
+                    "luas_total_hektar": float(row[2]) if row[2] else 0.0
+                })
+        
+        return {"status": "success", "rekomendasi": rekomendasi}
+        
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    
+@app.get("/recommendation_conversion")
+async def get_recommendation_conversion(limit: int = 10):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        query = """
+        SELECT 
+            w.nama_desa,
+            bw.kelas_kesesuaian,
+            pr.zona AS zona_saat_ini,
+            ROUND(SUM(ST_Area(ST_Intersection(bw.geom, pr.geom)) * 111319.9 * 111319.9 / 10000)::numeric, 2) AS luas_konversi_hektar
+        FROM tanaman_bawang_merah bw
+        JOIN administrasi_wilayah w ON ST_Intersects(bw.geom, w.geom)
+        JOIN pola_ruang pr ON ST_Intersects(bw.geom, pr.geom)
+        WHERE bw.kelas_kesesuaian IN ('S1', 'S2')
+          AND pr.zona NOT IN ('Kawasan Hortikultura', 'Kawasan Ketahanan Pangan', 'Kawasan Perkebunan')
+        GROUP BY w.nama_desa, bw.kelas_kesesuaian, pr.zona
+        ORDER BY luas_konversi_hektar DESC
+        LIMIT %s
+        """
+        
+        cur.execute(query, (limit,))
+        rows = cur.fetchall()
+        
+        cur.close()
+        conn.close()
+        
         if not rows:
-            return {"status": "success", "rekomendasi": []}
+            return {"status": "success", "rekomendasi_konversi": []}
         
         rekomendasi = []
         for row in rows:
             rekomendasi.append({
                 "nama_desa": str(row[0]) if row[0] else "-",
                 "kelas_kesesuaian": str(row[1]) if row[1] else "-",
-                "luas_total_hektar": float(row[2]) if row[2] else 0.0
+                "zona_saat_ini": str(row[2]) if row[2] else "-",
+                "luas_konversi_hektar": float(row[3]) if row[3] else 0.0
             })
         
-        return {"status": "success", "rekomendasi": rekomendasi}
+        return {"status": "success", "rekomendasi_konversi": rekomendasi}
         
     except Exception as e:
         return {"status": "error", "message": str(e)}

@@ -22,7 +22,6 @@
     @keyframes scan{0%{top:0;}100%{top:100%;}}
     .tech-grid{background-image:linear-gradient(rgba(165,208,185,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(165,208,185,0.04) 1px,transparent 1px);background-size:24px 24px;}
     #map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;}
-    /* zoom control — pojok kiri atas, tidak tertutup sidebar */
     .leaflet-top.leaflet-left{top:76px!important;left:240px!important;}
     .leaflet-control-zoom{border:none!important;box-shadow:none!important;margin:8px!important;}
     .leaflet-control-zoom a{background:rgba(15,23,42,0.85)!important;backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.06)!important;color:#e2e8f0!important;width:36px!important;height:36px!important;line-height:36px!important;font-size:18px!important;border-radius:8px!important;margin-bottom:4px!important;}
@@ -91,7 +90,7 @@
     </div>
   </header>
 
-  <!-- LAYER MATRIX — kiri bawah header, tidak menutupi zoom -->
+  <!-- LAYER MATRIX -->
   <aside class="fixed left-4 z-40" style="top:72px;">
     <div class="glass-panel p-3 hud-border relative overflow-y-auto" style="width:228px;">
       <div class="scan-line"></div>
@@ -212,18 +211,15 @@
     </button>
   </nav>
 
-  <!-- FOOTER -->
   <footer class="fixed bottom-4 left-4 z-30 pointer-events-none">
     <div class="glass-panel px-3 py-1 font-data-mono text-[9px] text-primary-fixed-dim flex items-center gap-2">
       <span class="w-1.5 h-1.5 rounded-full bg-primary-fixed-dim animate-pulse"></span>
-      SYSTEM LINK STABLE // DATA SYNC ENCRYPTED
     </div>
   </footer>
   <footer class="fixed bottom-4 right-4 z-30 pointer-events-none text-right">
     <div class="font-data-mono text-[9px] text-on-surface-variant opacity-40">© 2025 TERRAGIS PRECISION<br/>AGRICULTURAL INTELLIGENCE SYSTEMS</div>
   </footer>
 
-  <!-- TOAST -->
   <div id="toast" style="display:none;" class="fixed bottom-20 left-1/2 -translate-x-1/2 glass-panel px-5 py-2.5 rounded-full text-xs text-primary-fixed-dim z-[999] pointer-events-none flex items-center gap-2">
     <div class="w-3 h-3 border-2 border-primary-fixed-dim/40 border-t-primary-fixed-dim rounded-full animate-spin"></div>
     <span id="toast-text">Memuat...</span>
@@ -244,7 +240,6 @@
 
     function getCHColor(v){const n=parseFloat(v);for(const c of CH_COLOR)if(n>=c.min&&n<c.max)return c.color;return '#64748b';}
 
-    // PETA — satelit default, zoom control posisi kanan atas tidak bentrok
     const map=L.map('map',{center:[-4.57,119.77],zoom:11,zoomControl:true,preferCanvas:true});
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'&copy; Esri',maxZoom:19}).addTo(map);
 
@@ -504,7 +499,6 @@
         document.getElementById('chart-wrap').style.display='none';
         return;
       }
-      // Tabel ringkasan
       let html='<div class="space-y-1.5">';
       rows.forEach(r=>{
         const k=r.kelas||'-',luas=parseFloat(r.luas_hektar||0).toFixed(2),pct=total>0?((r.luas_hektar/total)*100).toFixed(1):0,barW=total>0?(r.luas_hektar/total)*100:0;
@@ -512,7 +506,7 @@
       });
       html+=`<div class="border-t border-white/10 pt-1.5 mt-1.5 flex justify-between"><span class="text-[9px] text-slate-500 uppercase">Total</span><span class="text-[10px] font-mono font-bold text-primary-fixed-dim">${total.toFixed(2)} ha</span></div></div>`;
       showResult('Analisis Polygon',html,true);
-      // Bar chart
+
       document.getElementById('chart-wrap').style.display='block';
       if(aChart)aChart.destroy();
       const ctx=document.getElementById('analyze-chart').getContext('2d');
@@ -612,14 +606,11 @@
       showToast('✓ File CSV berhasil diunduh!',true);
     }
 
-    // ── SHAPEFILE WRITER (manual, tanpa library eksternal) ──────────
-    // ── SHAPEFILE WRITER (manual binary, tanpa library eksternal) ─────
     function w32be(v,o,n){v.setInt32(o,n,false);}
     function w32le(v,o,n){v.setInt32(o,n,true);}
     function w64le(v,o,n){v.setFloat64(o,n,true);}
 
     function buildSHP(rings){
-      // Hitung jumlah titik dan bbox
       let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
       let numPoints=0;
       rings.forEach(ring=>{
@@ -631,34 +622,27 @@
       });
       const numParts=rings.length;
 
-      // Hitung ukuran record content (bytes):
-      // 4 (shapeType) + 32 (bbox) + 4 (numParts) + 4 (numPoints)
-      // + 4*numParts (parts index) + 16*numPoints (XY points)
       const recBytes = 4 + 32 + 4 + 4 + (4*numParts) + (16*numPoints);
-      // Total file = 100 (header) + 8 (rec header) + recBytes
       const totalBytes = 100 + 8 + recBytes;
 
       const buf = new ArrayBuffer(totalBytes);
       const v = new DataView(buf);
 
-      // === FILE HEADER (100 bytes) ===
-      w32be(v,0,9994);                    // file code
-      w32be(v,4,0);w32be(v,8,0);w32be(v,12,0);w32be(v,16,0);w32be(v,20,0); // unused
-      w32be(v,24,(totalBytes/2));         // file length in 16-bit words
-      w32le(v,28,1000);                   // version
-      w32le(v,32,5);                      // shape type: Polygon
+      w32be(v,0,9994);                    
+      w32be(v,4,0);w32be(v,8,0);w32be(v,12,0);w32be(v,16,0);w32be(v,20,0); 
+      w32be(v,24,(totalBytes/2));         
+      w32le(v,28,1000);                   
+      w32le(v,32,5);                     
       w64le(v,36,minX); w64le(v,44,minY);
       w64le(v,52,maxX); w64le(v,60,maxY);
-      w64le(v,68,0); w64le(v,76,0);      // Z range (unused)
-      w64le(v,84,0); w64le(v,92,0);      // M range (unused)
+      w64le(v,68,0); w64le(v,76,0);      
+      w64le(v,84,0); w64le(v,92,0);      
 
-      // === RECORD HEADER (8 bytes at offset 100) ===
-      w32be(v,100,1);                     // record number (1-based)
-      w32be(v,104,recBytes/2);            // content length in 16-bit words
+      w32be(v,100,1);                     
+      w32be(v,104,recBytes/2);            
 
-      // === RECORD CONTENT (starts at offset 108) ===
       let o=108;
-      w32le(v,o,5); o+=4;               // shape type: Polygon
+      w32le(v,o,5); o+=4;               
       w64le(v,o,minX); o+=8;
       w64le(v,o,minY); o+=8;
       w64le(v,o,maxX); o+=8;
@@ -666,14 +650,12 @@
       w32le(v,o,numParts); o+=4;
       w32le(v,o,numPoints); o+=4;
 
-      // Parts index array
       let ptIdx=0;
       rings.forEach(ring=>{
         w32le(v,o,ptIdx); o+=4;
         ptIdx+=ring.length;
       });
 
-      // Points array
       rings.forEach(ring=>{
         ring.forEach(([x,y])=>{
           w64le(v,o,x); o+=8;
@@ -685,19 +667,16 @@
     }
 
     function buildSHX(recBytes){
-      // recBytes = content bytes of the one record (NOT including record header)
-      const buf=new ArrayBuffer(108); // 100 header + 8 for one record
+      const buf=new ArrayBuffer(108);
       const v=new DataView(buf);
       w32be(v,0,9994);
       w32be(v,4,0);w32be(v,8,0);w32be(v,12,0);w32be(v,16,0);w32be(v,20,0);
-      w32be(v,24,54);  // file length: (100+8)/2 = 54 words
+      w32be(v,24,54);  
       w32le(v,28,1000);
       w32le(v,32,5);
-      // bbox (zeros ok for SHX)
       for(let i=36;i<100;i+=8)v.setFloat64(i,0,true);
-      // one index record: offset=50 words (100 bytes), content length in words
-      w32be(v,100,50);             // offset of record 1 in SHP (in 16-bit words)
-      w32be(v,104,recBytes/2);     // content length of record 1
+      w32be(v,100,50);             
+      w32be(v,104,recBytes/2);     
       return buf;
     }
 
@@ -707,39 +686,36 @@
         {name:'TANGGAL',  type:'C',len:10,dec:0},
         {name:'LUAS_HA',  type:'N',len:12,dec:2}
       ];
-      const recLen=1+fields.reduce((s,f)=>s+f.len,0); // 1 = deletion flag
+      const recLen=1+fields.reduce((s,f)=>s+f.len,0);
       const headerLen=32+(fields.length*32)+1;
       const buf=new ArrayBuffer(headerLen+recLen+1);
       const v=new DataView(buf);
       const enc=new TextEncoder();
 
-      // Header
       v.setUint8(0,3);
       const now=new Date();
       v.setUint8(1,now.getFullYear()-1900);
       v.setUint8(2,now.getMonth()+1);
       v.setUint8(3,now.getDate());
-      v.setUint32(4,1,true);            // num records
+      v.setUint32(4,1,true);            
       v.setUint16(8,headerLen,true);
       v.setUint16(10,recLen,true);
-      for(let i=12;i<32;i++)v.setUint8(i,0); // reserved
+      for(let i=12;i<32;i++)v.setUint8(i,0); 
 
-      // Field descriptors
       let fo=32;
       fields.forEach(f=>{
         const nb=enc.encode(f.name);
         for(let i=0;i<11;i++)v.setUint8(fo+i, i<nb.length ? nb[i] : 0);
         v.setUint8(fo+11,f.type.charCodeAt(0));
-        for(let i=12;i<16;i++)v.setUint8(fo+i,0); // address
+        for(let i=12;i<16;i++)v.setUint8(fo+i,0); 
         v.setUint8(fo+16,f.len);
         v.setUint8(fo+17,f.dec);
         for(let i=18;i<32;i++)v.setUint8(fo+i,0);
         fo+=32;
       });
-      v.setUint8(fo,0x0D); fo++; // header terminator
+      v.setUint8(fo,0x0D); fo++; 
 
-      // One data record
-      v.setUint8(fo,0x20); fo++; // not deleted
+      v.setUint8(fo,0x20); fo++; 
       const vals=[
         'Area Analisis'.substring(0,20).padEnd(20),
         String(tanggal).substring(0,10).padEnd(10),
@@ -750,7 +726,7 @@
         for(let j=0;j<f.len;j++)v.setUint8(fo+j, j<bytes.length ? bytes[j] : 0x20);
         fo+=f.len;
       });
-      v.setUint8(fo,0x1A); // EOF marker
+      v.setUint8(fo,0x1A); 
       return buf;
     }
 
@@ -773,7 +749,6 @@
           : '0';
         const tanggal=new Date().toISOString().split('T')[0];
 
-        // Hitung recBytes untuk SHX
         const numPoints=rings.reduce((s,r)=>s+r.length,0);
         const recBytes=4+32+4+4+(4*rings.length)+(16*numPoints);
 

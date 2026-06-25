@@ -1,8 +1,5 @@
-/* script.js — SIG Kesesuaian Lahan Bawang Merah */
-
 const API_BASE = 'http://localhost:8000';
 
-// ── WARNA ─────────────────────────────────────────
 const SUAI_COLOR = { S1:'#16a34a', S2:'#22c55e', S3:'#f59e0b', N:'#ef4444', '-':'#475569', null:'#475569' };
 const CH_COLOR   = [{min:2300,max:2400,color:'#cae4b5'},{min:2400,max:2500,color:'#d9a0b2'},{min:2500,max:2600,color:'#26d6e7'},{min:2600,max:2700,color:'#796be2'},{min:2700,max:2800,color:'#cb6f9b'}];
 const KL_COLOR   = {'0-3%':'#bbf7d0','3-8%':'#86efac','8-15%':'#4ade80','15-25%':'#f97316','25-45%':'#dc2626','>45%':'#7f1d1d'};
@@ -14,15 +11,12 @@ function getCHColor(v) {
   return '#64748b';
 }
 
-// ── PETA ──────────────────────────────────────────
 const map = L.map('map', { center:[-4.57,119.77], zoom:11, zoomControl:true, preferCanvas:true });
 L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
   attribution:'© Google Maps', maxZoom:20
 }).addTo(map);
-// ── STATE ─────────────────────────────────────────
 const layerCache = {}, leafletLayers = {};
 
-// ── STATUS API ────────────────────────────────────
 async function checkApi() {
   try {
     const r = await fetch(`${API_BASE}/layers`, { signal: AbortSignal.timeout(4000) });
@@ -39,11 +33,9 @@ async function checkApi() {
   }
 }
 
-// ── TOAST ─────────────────────────────────────────
 function showToast(t) { document.getElementById('toast-text').textContent = t; document.getElementById('toast').style.display = 'flex'; }
 function hideToast()  { document.getElementById('toast').style.display = 'none'; }
 
-// ── PROGRESS ──────────────────────────────────────
 function showProgress(t) {
   document.getElementById('layer-progress').style.display = 'block';
   document.getElementById('progress-label').textContent = t;
@@ -55,7 +47,6 @@ function hideProgress() {
   setTimeout(() => { document.getElementById('layer-progress').style.display = 'none'; setProgress(0); }, 500);
 }
 
-// ── SIMPLIFY GEOMETRY ─────────────────────────────
 function simplifyGeoJSON(g, tol = 0.0003) {
   if (!g?.features) return g;
   g.features = g.features.map(f => { if (f.geometry) f.geometry = simplifyGeom(f.geometry, tol); return f; });
@@ -78,7 +69,6 @@ function simplifyRing(ring, tol) {
   return out.length >= 4 ? out : ring;
 }
 
-// ── LOAD LAYER ────────────────────────────────────
 const TOLS = { pola_ruang:0.0006, kemiringan_lereng:0.0004, tanaman_bawang_merah:0.0003, curah_hujan:0.0002, administrasi_wilayah:0.0001 };
 
 async function loadLayer(name) {
@@ -106,7 +96,6 @@ async function loadLayer(name) {
   }
 }
 
-// ── STYLE ─────────────────────────────────────────
 function getStyle(name) {
   return function(f) {
     const p = f.properties;
@@ -119,7 +108,6 @@ function getStyle(name) {
   };
 }
 
-// ── EACH FEATURE ──────────────────────────────────
 function onEach(name) {
   return function(f, layer) {
     layer.on('click', function(e) { L.DomEvent.stopPropagation(e); showInfo(name, f.properties, e.latlng); });
@@ -130,7 +118,6 @@ function onEach(name) {
   };
 }
 
-// ── TOGGLE ────────────────────────────────────────
 async function toggleLayer(name, on) {
   if (on) {
     if (leafletLayers[name]) { map.addLayer(leafletLayers[name]); return; }
@@ -147,7 +134,6 @@ async function toggleLayer(name, on) {
   }
 }
 
-// ── INFO PANEL ────────────────────────────────────
 function showInfo(name, p, latlng) {
   const panel = document.getElementById('info-panel');
   const cont  = document.getElementById('info-content');
@@ -198,7 +184,6 @@ function suaiText(k)   { return {S1:'text-green-400',S2:'text-green-400',S3:'tex
 function klLabel(k)    { return {'0-3%':'Datar','3-8%':'Landai','8-15%':'Agak Miring','15-25%':'Miring','25-45%':'Curam','>45%':'Sangat Curam'}[k]||'-'; }
 function closeInfo()   { document.getElementById('info-panel').style.display = 'none'; }
 
-// ── SUITABILITY QUERY ─────────────────────────────
 async function querySuitability(lat, lon) {
   try {
     const res  = await fetch(`${API_BASE}/suitability?lat=${lat}&lon=${lon}`);
@@ -219,7 +204,6 @@ async function querySuitability(lat, lon) {
   } catch {}
 }
 
-// ── KLIK PETA ─────────────────────────────────────
 map.on('click', function(e) {
   if (!isDrawing) {
     document.getElementById('info-content').innerHTML = `<p class="text-xs text-slate-500 text-center py-3">Mengambil info lokasi...</p>`;
@@ -228,7 +212,6 @@ map.on('click', function(e) {
   }
 });
 
-// ── DRAW POLYGON ──────────────────────────────────
 const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
 let drawCtrl = null, isDrawing = false, aChart = null;
@@ -315,42 +298,42 @@ function clearDraw() {
   if (aChart) { aChart.destroy(); aChart = null; }
 }
 
-// ── REKOMENDASI ───────────────────────────────────
 async function loadRecommendation() {
-  showToast('Menghitung rekomendasi...');
-  const box = document.getElementById('rekomendasi-result');
-  box.style.display = 'block';
-  box.innerHTML = `<div class="bg-slate-800/60 rounded-xl p-3"><p class="text-xs text-slate-500 text-center">Memproses...</p></div>`;
-  try {
-    const res  = await fetch(`${API_BASE}/recommendation`);
-    const json = await res.json();
-    if (json.status === 'error') throw new Error(json.message);
-    const data = json.rekomendasi || [];
-    let html = `<div class="bg-slate-800/60 border border-slate-700 rounded-xl overflow-hidden">
-      <div class="px-3 py-2 border-b border-slate-700"><p class="text-[10px] text-green-400 font-bold uppercase tracking-widest">Top Rekomendasi Lahan</p></div>`;
-    if (!data.length) {
-      html += `<p class="text-xs text-slate-500 text-center py-3">Tidak ada data.</p>`;
-    } else {
-      data.forEach((r,i) => {
-        html += `<div class="flex items-center gap-3 px-3 py-2.5 border-b border-slate-700/50 last:border-0">
-          <span class="text-[10px] text-slate-600 w-4 flex-shrink-0">${i+1}</span>
-          <div class="flex-1 min-w-0">
-            <p class="text-xs font-semibold truncate">${r.nama_desa||'-'}</p>
-            <p class="text-[10px] text-slate-500 mt-0.5">${r.kelas_kesesuaian||'-'}</p>
-          </div>
-          <span class="text-xs font-bold font-mono text-green-400 flex-shrink-0">${r.luas_total_hektar||'-'} ha</span>
-        </div>`;
-      });
+    showToast('Menghitung rekomendasi...');
+    const box = document.getElementById('rekomendasi-result');
+    box.style.display = 'block';
+    box.innerHTML = `<div class="bg-slate-800/60 rounded-xl p-3"><p class="text-xs text-slate-500 text-center">Memproses...</p></div>`;
+    try {
+        const res = await fetch(`${API_BASE}/recommendation`);
+        const json = await res.json();
+        if (json.status === 'error') throw new Error(json.message);
+        const data = json.rekomendasi || [];
+        let html = `<div class="bg-slate-800/60 border border-slate-700 rounded-xl overflow-hidden">
+            <div class="px-3 py-2 border-b border-slate-700"><p class="text-[10px] text-green-400 font-bold uppercase tracking-widest">Top Rekomendasi Lahan</p></div>`;
+        if (!data.length) {
+            html += `<p class="text-xs text-slate-500 text-center py-3">Tidak ada data rekomendasi.</p>`;
+        } else {
+            data.forEach((r, i) => {
+                html += `<div class="flex items-center gap-3 px-3 py-2.5 border-b border-slate-700/50 last:border-0">
+                    <span class="text-[10px] text-slate-600 w-4 flex-shrink-0">${i + 1}</span>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs font-semibold truncate">${r.nama_desa || '-'}</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">${r.kelas_kesesuaian || '-'}</p>
+                    </div>
+                    <span class="text-xs font-bold font-mono text-green-400 flex-shrink-0">${r.luas_total_hektar || '-'} ha</span>
+                </div>`;
+            });
+        }
+        html += `</div>`;
+        box.innerHTML = html;
+    } catch (e) {
+        box.innerHTML = `<p class="text-xs text-red-400 px-2">Gagal: ${e.message}</p>`;
+    } finally {
+        hideToast();
     }
-    html += `</div>`;
-    box.innerHTML = html;
-  } catch(e) {
-    box.innerHTML = `<p class="text-xs text-red-400 px-2">Gagal: ${e.message}</p>`;
-  } finally { hideToast(); }
 }
 
-// ── INIT ──────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  await checkApi();
-  await toggleLayer('tanaman_bawang_merah', true);
+    await checkApi();
+    await toggleLayer('tanaman_bawang_merah', true);
 });
